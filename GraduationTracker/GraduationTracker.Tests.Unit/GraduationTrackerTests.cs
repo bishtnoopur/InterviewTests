@@ -2,85 +2,105 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
 using System.Linq;
+using Moq;
 
 namespace GraduationTracker.Tests.Unit
 {
     [TestClass]
     public class GraduationTrackerTests
     {
+        Diploma[] _diploma;
+        Student[] _students;
+        Student _studentZeroAvg;
+        Requirement[] _requirements;
+        GraduationTracker _tracker;
+        GraduationTracker _moqTracker;
+
+        [TestInitialize]
+        public void Setup()
+        {
+            {
+                _tracker = new GraduationTracker(new RepositoryWrapper(), new StandingFactory());
+                _diploma = MockData.GetDiplomas();
+                _students = MockData.GetStudents();
+                _studentZeroAvg = MockData.GetStudentsWithZeroAverage();
+                _requirements = MockData.GetRequirements();
+
+                Mock<IStandingFactory> standingFactory = new Mock<IStandingFactory>();
+                Mock<IGradResult> gradResult = new Mock<IGradResult>();
+
+               
+                gradResult.Setup(x => x.GetResult()).Returns(Tuple.Create(true, STANDING.SumaCumLaude));
+                standingFactory.Setup(x => x.CreateStanding(It.IsAny<int>())).Returns(gradResult.Object);
+
+                Mock<IRepository> repository = new Mock<IRepository>();
+                repository.Setup(x => x.GetRequirements()).Returns(_requirements);
+
+                _moqTracker = new GraduationTracker(repository.Object, standingFactory.Object);
+            }
+        }
+
+        [TestMethod]
+        public void TestHasGraduatedUsingMockObjects()
+        {
+            // Arrange 
+            var diploma = _diploma.FirstOrDefault();
+            Student student = _students.FirstOrDefault();
+            var expected = Tuple.Create(true, STANDING.SumaCumLaude);
+
+            // Act 
+            var actual = _moqTracker.HasGraduated(diploma, student);
+
+            // Assert 
+            Assert.AreEqual(expected, actual);
+
+        }
+
         [TestMethod]
         public void TestHasCredits()
         {
-            var tracker = new GraduationTracker();
-
-            var diploma = new Diploma
-            {
-                Id = 1,
-                Credits = 4,
-                Requirements = new int[] { 100, 102, 103, 104 }
-            };
-
-            var students = new[]
-            {
-               new Student
-               {
-                   Id = 1,
-                   Courses = new Course[]
-                   {
-                        new Course{Id = 1, Name = "Math", Mark=95 },
-                        new Course{Id = 2, Name = "Science", Mark=95 },
-                        new Course{Id = 3, Name = "Literature", Mark=95 },
-                        new Course{Id = 4, Name = "Physichal Education", Mark=95 }
-                   }
-               },
-               new Student
-               {
-                   Id = 2,
-                   Courses = new Course[]
-                   {
-                        new Course{Id = 1, Name = "Math", Mark=80 },
-                        new Course{Id = 2, Name = "Science", Mark=80 },
-                        new Course{Id = 3, Name = "Literature", Mark=80 },
-                        new Course{Id = 4, Name = "Physichal Education", Mark=80 }
-                   }
-               },
-            new Student
-            {
-                Id = 3,
-                Courses = new Course[]
-                {
-                    new Course{Id = 1, Name = "Math", Mark=50 },
-                    new Course{Id = 2, Name = "Science", Mark=50 },
-                    new Course{Id = 3, Name = "Literature", Mark=50 },
-                    new Course{Id = 4, Name = "Physichal Education", Mark=50 }
-                }
-            },
-            new Student
-            {
-                Id = 4,
-                Courses = new Course[]
-                {
-                    new Course{Id = 1, Name = "Math", Mark=40 },
-                    new Course{Id = 2, Name = "Science", Mark=40 },
-                    new Course{Id = 3, Name = "Literature", Mark=40 },
-                    new Course{Id = 4, Name = "Physichal Education", Mark=40 }
-                }
-            }
-
-
-            //tracker.HasGraduated()
-        };
-            
+            // Arrange 
+            var diploma = _diploma.FirstOrDefault();
+            var students = _students;
             var graduated = new List<Tuple<bool, STANDING>>();
+           
+            var expectedGraduatedCount = 3;
+            var expectedNotGraduatedCount = 1;
 
-            foreach(var student in students)
+            // Act
+            foreach (var student in students)
             {
-                graduated.Add(tracker.HasGraduated(diploma, student));      
+                graduated.Add(_tracker.HasGraduated(diploma, student));
             }
 
-            
-            Assert.IsFalse(graduated.Any());
+            var studentsGraduated = graduated.Where(t => t.Item1 == true).Count();
+            var studentsNotGraduated = graduated.Where(t => t.Item1 == false).Count();
 
+            // Assert
+            Assert.IsFalse(graduated.All(t => t.Item1 == true));
+            Assert.IsTrue(graduated.Any(t => t.Item1 == true));
+            Assert.AreEqual(expectedGraduatedCount, studentsGraduated);
+            Assert.AreEqual(expectedNotGraduatedCount, studentsNotGraduated);
+            Assert.IsTrue(graduated.Any(t => t.Item2 == STANDING.Average));
+            Assert.IsTrue(graduated.Any(t => t.Item2 == STANDING.MagnaCumLaude));
+            Assert.IsTrue(graduated.Any(t => t.Item2 == STANDING.SumaCumLaude));
+            Assert.IsTrue(graduated.Any(t => t.Item2 == STANDING.Remedial));
+
+        }
+
+        [TestMethod]
+        public void TestStudentWithZeroAverageshouldNotGraduate()
+        {
+            // Arrange
+            var diploma = _diploma.FirstOrDefault();
+            Student student = _studentZeroAvg;
+
+            // Act
+            var graduated = _tracker.HasGraduated(diploma, student);
+
+            // Assert
+            Assert.IsTrue(graduated.Item1 == false);
+            Assert.IsTrue(graduated.Item2 == STANDING.None);
         }
 
 
